@@ -4,14 +4,14 @@ use regex as R;
 
 pub struct Decoder<'a> {
     captures: R::Captures<'a>,
-    value: Option<&'a str>,
+    stack: Vec<&'a str>,
 }
 
 impl<'a> Decoder<'a> {
     pub fn new(captures: R::Captures<'a>) -> Decoder<'a> {
         Decoder {
             captures: captures,
-            value: None,
+            stack: vec![],
         }
     }
 }
@@ -19,7 +19,7 @@ impl<'a> Decoder<'a> {
 macro_rules! read_primitive {
     ($name:ident, $ty:ident) => {
         fn $name(&mut self) -> Result<$ty> {
-            match self.value {
+            match self.stack.pop() {
                 None => Err("missing value".into()),
                 Some(value) => value.parse().chain_err(|| "failed to decode primitive")
             }
@@ -54,7 +54,7 @@ impl<'a> S::Decoder for Decoder<'a> {
     }
 
     fn read_char(&mut self) -> Result<char> {
-        match self.value {
+        match self.stack.pop() {
             None => Err("missing value".into()),
             Some(value) => {
                 let mut chars = value.chars();
@@ -73,7 +73,7 @@ impl<'a> S::Decoder for Decoder<'a> {
     }
 
     fn read_str(&mut self) -> Result<String> {
-        match self.value {
+        match self.stack.pop() {
             None => Err("missing value".into()),
             Some(value) => Ok(value.into())
         }
@@ -107,8 +107,8 @@ impl<'a> S::Decoder for Decoder<'a> {
     fn read_struct_field<T, F>(&mut self, f_name: &str, f_idx: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
         let value = match self.captures.name(f_name) {
             None => return Err("missing field name".into()),
-            Some(value) => {
-                self.value = Some(value);
+            Some(val) => {
+                self.stack.push(val);
                 try!(f(self))
             }
         };
@@ -132,10 +132,14 @@ impl<'a> S::Decoder for Decoder<'a> {
     }
 
     fn read_option<T, F>(&mut self, mut f: F) -> Result<T> where F: FnMut(&mut Self, bool) -> Result<T> {
-        if self.value.is_none() {
-            f(self, false)
-        } else {
-            f(self, true)
+        let value = self.stack.pop();
+
+        match value {
+            None => f(self, false),
+            Some(value) => {
+                self.stack.push(value);
+                f(self, true)
+            }
         }
     }
 
