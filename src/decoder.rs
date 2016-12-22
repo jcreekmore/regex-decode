@@ -131,8 +131,12 @@ impl<'a> S::Decoder for Decoder<'a> {
         unimplemented!();
     }
 
-    fn read_option<T, F>(&mut self, f: F) -> Result<T> where F: FnMut(&mut Self, bool) -> Result<T> {
-        unimplemented!();
+    fn read_option<T, F>(&mut self, mut f: F) -> Result<T> where F: FnMut(&mut Self, bool) -> Result<T> {
+        if self.value.is_none() {
+            f(self, false)
+        } else {
+            f(self, true)
+        }
     }
 
     fn read_seq<T, F>(&mut self, f: F) -> Result<T> where F: FnOnce(&mut Self, usize) -> Result<T> {
@@ -333,5 +337,24 @@ mod tests {
 
         assert_eq!(val.title, 'C');
         assert_eq!(val.year, 1941);
+    }
+
+    #[test]
+    fn decode_struct_with_option() {
+        #[derive(RustcDecodable)]
+        struct Capture {
+            pub title: String,
+            pub year: Option<usize>,
+        }
+
+        let re = R::Regex::new(r"'(?P<title>[^']+)'\s+\((?P<year>\d{4})?\)")
+                           .unwrap();
+        let text = "Not my favorite movie: 'Citizen Kane' (1941).";
+
+        let val = decode::<Capture>(&re, &text).unwrap();
+
+        assert_eq!(val.title, "Citizen Kane");
+        assert_eq!(val.year.is_some(), true);
+        assert_eq!(val.year.unwrap(), 1941);
     }
 }
