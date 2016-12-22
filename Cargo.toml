@@ -1,0 +1,8 @@
+[package]
+authors = ["Jonathan Creekmore <jonathan@thecreekmores.org>"]
+name = "regex-decode"
+version = "0.1.0"
+
+[dependencies]
+regex = "0.1.80"
+rustc-serialize = "0.3.22"
