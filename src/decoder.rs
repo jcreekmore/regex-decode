@@ -4,7 +4,7 @@ use regex as R;
 
 pub struct Decoder<'a> {
     captures: R::Captures<'a>,
-    stack: Vec<&'a str>,
+    stack: Vec<String>,
 }
 
 impl<'a> Decoder<'a> {
@@ -108,7 +108,7 @@ impl<'a> S::Decoder for Decoder<'a> {
         let value = match self.captures.name(f_name) {
             None => return Err("missing field name".into()),
             Some(val) => {
-                self.stack.push(val);
+                self.stack.push(val.to_string());
                 try!(f(self))
             }
         };
@@ -144,11 +144,18 @@ impl<'a> S::Decoder for Decoder<'a> {
     }
 
     fn read_seq<T, F>(&mut self, f: F) -> Result<T> where F: FnOnce(&mut Self, usize) -> Result<T> {
-        unimplemented!();
+        let mut temp = vec![];
+        for val in self.captures.iter().skip(1) {
+            temp.push(val.unwrap().to_string());
+        }
+        temp.reverse();
+        let len = temp.len();
+        self.stack.extend(temp);
+        f(self, len)
     }
 
     fn read_seq_elt<T, F>(&mut self, idx: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
-        unimplemented!();
+        f(self)
     }
 
     fn read_map<T, F>(&mut self, f: F) -> Result<T> where F: FnOnce(&mut Self, usize) -> Result<T> {
@@ -360,5 +367,17 @@ mod tests {
         assert_eq!(val.title, "Citizen Kane");
         assert_eq!(val.year.is_some(), true);
         assert_eq!(val.year.unwrap(), 1941);
+    }
+
+    #[test]
+    fn decode_vec_string() {
+        let re = R::Regex::new(r"'(?P<title>[^']+)'\s+\((?P<year>\d{4})?\)")
+                           .unwrap();
+        let text = "Not my favorite movie: 'Citizen Kane' (1941).";
+
+        let val = decode::<Vec<String>>(&re, &text).unwrap();
+
+        assert_eq!(val[0], "Citizen Kane");
+        assert_eq!(val[1], "1941");
     }
 }
