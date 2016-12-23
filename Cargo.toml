@@ -2,6 +2,7 @@
 authors = ["Jonathan Creekmore <jonathan@thecreekmores.org>"]
 name = "regex-decode"
 version = "0.1.0"
+license = "MIT"
 
 [dependencies]
 error-chain = "0.7.1"
