@@ -3,6 +3,9 @@ authors = ["Jonathan Creekmore <jonathan@thecreekmores.org>"]
 name = "regex-decode"
 version = "0.1.0"
 license = "MIT"
+repository = "https://github.com/jcreekmore/regex-decode"
+documentation = "https://docs.rs/regex-decode/"
+keywords = ["regex", "decode"]
 
 [dependencies]
 error-chain = "0.7.1"
