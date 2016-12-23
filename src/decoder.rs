@@ -100,19 +100,17 @@ impl<'a> S::Decoder for Decoder<'a> {
     }
 
     fn read_struct<T, F>(&mut self, s_name: &str, len: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
-        let value = try!(f(self));
-        Ok(value)
+        f(self)
     }
 
     fn read_struct_field<T, F>(&mut self, f_name: &str, f_idx: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
-        let value = match self.captures.name(f_name) {
-            None => return Err("missing field name".into()),
+        match self.captures.name(f_name) {
+            None => Err("missing field name".into()),
             Some(val) => {
                 self.stack.push(val.to_string());
-                try!(f(self))
+                f(self)
             }
-        };
-        Ok(value)
+        }
     }
 
     fn read_tuple<T, F>(&mut self, len: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
