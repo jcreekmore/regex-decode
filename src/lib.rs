@@ -6,6 +6,7 @@ extern crate regex;
 extern crate rustc_serialize;
 
 mod decoder;
+pub use decoder::decode;
 
 pub mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types

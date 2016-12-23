@@ -79,27 +79,36 @@ impl<'a> S::Decoder for Decoder<'a> {
         }
     }
 
-    fn read_enum<T, F>(&mut self, name: &str, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
-        unimplemented!();
+    fn read_enum<T, F>(&mut self, _: &str, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
+        f(self)
     }
 
-    fn read_enum_variant<T, F>(&mut self, names: &[&str], f: F) -> Result<T> where F: FnMut(&mut Self, usize) -> Result<T> {
-        unimplemented!();
+    fn read_enum_variant<T, F>(&mut self, names: &[&str], mut f: F) -> Result<T> where F: FnMut(&mut Self, usize) -> Result<T> {
+        let name = match self.stack.pop() {
+            None => return Err("missing value".into()),
+            Some(name) => name,
+        };
+
+        let idx = match names.iter().position(|n| *n == name) {
+            Some(idx) => idx,
+            None => return Err(format!("unknown variant {}", name).into())
+        };
+        f(self, idx)
     }
 
-    fn read_enum_variant_arg<T, F>(&mut self, a_idx: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
-        unimplemented!();
+    fn read_enum_variant_arg<T, F>(&mut self, _: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
+        f(self)
     }
 
     fn read_enum_struct_variant<T, F>(&mut self, names: &[&str], f: F) -> Result<T> where F: FnMut(&mut Self, usize) -> Result<T> {
-        unimplemented!();
+        self.read_enum_variant(names, f)
     }
 
-    fn read_enum_struct_variant_field<T, F>(&mut self, f_name: &str, f_idx: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
-        unimplemented!();
+    fn read_enum_struct_variant_field<T, F>(&mut self, _: &str, f_idx: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
+        self.read_enum_variant_arg(f_idx, f)
     }
 
-    fn read_struct<T, F>(&mut self, s_name: &str, _: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
+    fn read_struct<T, F>(&mut self, _: &str, _: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
         f(self)
     }
 
@@ -128,12 +137,12 @@ impl<'a> S::Decoder for Decoder<'a> {
         }
     }
 
-    fn read_tuple_struct<T, F>(&mut self, s_name: &str, len: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
-        unimplemented!();
+    fn read_tuple_struct<T, F>(&mut self, _: &str, len: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
+        self.read_tuple(len, f)
     }
 
     fn read_tuple_struct_arg<T, F>(&mut self, a_idx: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
-        unimplemented!();
+        self.read_tuple_arg(a_idx, f)
     }
 
     fn read_option<T, F>(&mut self, mut f: F) -> Result<T> where F: FnMut(&mut Self, bool) -> Result<T> {
@@ -164,15 +173,22 @@ impl<'a> S::Decoder for Decoder<'a> {
     }
 
     fn read_map<T, F>(&mut self, f: F) -> Result<T> where F: FnOnce(&mut Self, usize) -> Result<T> {
-        unimplemented!();
+        let len = self.captures.len() - 1;
+
+        for (key, value) in self.captures.iter_named() {
+            self.stack.push(value.unwrap().to_string());
+            self.stack.push(key.to_string());
+        }
+
+        f(self, len)
     }
 
-    fn read_map_elt_key<T, F>(&mut self, idx: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
-        unimplemented!();
+    fn read_map_elt_key<T, F>(&mut self, _: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
+        f(self)
     }
 
-    fn read_map_elt_val<T, F>(&mut self, idx: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
-        unimplemented!();
+    fn read_map_elt_val<T, F>(&mut self, _: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
+        f(self)
     }
 
     fn error(&mut self, err: &str) -> Self::Error {
@@ -192,6 +208,7 @@ pub fn decode<T: S::Decodable>(regex: &R::Regex, string: &str) -> Result<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use regex as R;
     use super::*;
 
@@ -396,5 +413,41 @@ mod tests {
 
         assert_eq!(val[0], "Citizen Kane");
         assert_eq!(val[1], "1941");
+    }
+
+    #[test]
+    fn decode_hashmap() {
+        let re = R::Regex::new(r"'(?P<title>[^']+)'\s+\((?P<year>\d{4})?\)")
+                           .unwrap();
+        let text = "Not my favorite movie: 'Citizen Kane' (1941).";
+
+        let val = decode::<HashMap<String, String>>(&re, &text).unwrap();
+
+        assert_eq!(val.get("title").unwrap(), "Citizen Kane");
+        assert_eq!(val.get("year").unwrap(), "1941");
+    }
+
+    #[test]
+    fn decode_struct_enum() {
+        #[derive(Debug, RustcDecodable, PartialEq)]
+        enum Blah {
+            Foo,
+            Bar,
+        }
+
+        #[derive(RustcDecodable)]
+        struct Capture {
+            pub title: Blah,
+            pub year: usize,
+        }
+
+        let re = R::Regex::new(r"'(?P<title>[^']+)'\s+\((?P<year>\d{4})?\)")
+                           .unwrap();
+        let text = "Not my favorite movie: 'Foo' (1941).";
+
+        let val = decode::<Capture>(&re, &text).unwrap();
+
+        assert_eq!(val.title, Blah::Foo);
+        assert_eq!(val.year, 1941);
     }
 }
