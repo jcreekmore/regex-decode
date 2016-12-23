@@ -99,11 +99,11 @@ impl<'a> S::Decoder for Decoder<'a> {
         unimplemented!();
     }
 
-    fn read_struct<T, F>(&mut self, s_name: &str, len: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
+    fn read_struct<T, F>(&mut self, s_name: &str, _: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
         f(self)
     }
 
-    fn read_struct_field<T, F>(&mut self, f_name: &str, f_idx: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
+    fn read_struct_field<T, F>(&mut self, f_name: &str, _: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
         match self.captures.name(f_name) {
             None => Err("missing field name".into()),
             Some(val) => {
@@ -113,12 +113,19 @@ impl<'a> S::Decoder for Decoder<'a> {
         }
     }
 
-    fn read_tuple<T, F>(&mut self, len: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
-        unimplemented!();
+    fn read_tuple<T, F>(&mut self, _: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
+        f(self)
     }
 
     fn read_tuple_arg<T, F>(&mut self, a_idx: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
-        unimplemented!();
+        // a_idx + 1 because capture 0 is the whole match
+        match self.captures.at(a_idx + 1) {
+            None => Err("missing tuple arg".into()),
+            Some(val) => {
+                self.stack.push(val.to_string());
+                f(self)
+            }
+        }
     }
 
     fn read_tuple_struct<T, F>(&mut self, s_name: &str, len: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
@@ -152,7 +159,7 @@ impl<'a> S::Decoder for Decoder<'a> {
         f(self, len)
     }
 
-    fn read_seq_elt<T, F>(&mut self, idx: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
+    fn read_seq_elt<T, F>(&mut self, _: usize, f: F) -> Result<T> where F: FnOnce(&mut Self) -> Result<T> {
         f(self)
     }
 
@@ -365,6 +372,18 @@ mod tests {
         assert_eq!(val.title, "Citizen Kane");
         assert_eq!(val.year.is_some(), true);
         assert_eq!(val.year.unwrap(), 1941);
+    }
+
+    #[test]
+    fn decode_tuple() {
+        let re = R::Regex::new(r"'(?P<title>[^']+)'\s+\((?P<year>\d{4})?\)")
+                           .unwrap();
+        let text = "Not my favorite movie: 'Citizen Kane' (1941).";
+
+        let (title, year) = decode::<(String, usize)>(&re, &text).unwrap();
+
+        assert_eq!(title, "Citizen Kane");
+        assert_eq!(year, 1941);
     }
 
     #[test]
