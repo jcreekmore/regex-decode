@@ -49,7 +49,7 @@ fn test() {
 
 ```
 
-You can also extract to a tuple of you don't want to create a named struct.
+You can also extract to a tuple if you don't want to create a named struct.
 
 ```rust
 extern crate regex;
